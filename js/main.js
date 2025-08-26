@@ -4,7 +4,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize charts
+    // Initialize charts //
     Charts.initCharts();
     
     // Initialize dark mode based on saved preference
