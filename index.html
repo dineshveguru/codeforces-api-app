@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeFit - Your Codeforces Fitness Tracker</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header Section -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8">
+            <div class="flex items-center">
+                <h1 class="text-3xl font-bold text-indigo-700">CodeFit</h1>
+                <span class="ml-2 text-sm bg-indigo-100 text-indigo-800 py-1 px-2 rounded-full">Beta</span>
+            </div>
+            <div class="mt-4 md:mt-0 flex">
+                <div class="flex items-center">
+                    <input type="text" id="username-input" placeholder="Enter Codeforces Handle" 
+                           class="px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button id="search-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-r-md hover:bg-indigo-700 transition">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <button id="personal-dashboard-btn" class="ml-2 bg-indigo-500 text-white px-3 py-2 rounded-md hover:bg-indigo-600 transition hidden">
+                    <i class="fas fa-user-circle mr-1"></i> My Dashboard
+                </button>
+                <label class="toggle-switch mx-2" title="Toggle Dark Mode">
+                    <input type="checkbox" id="dark-mode-toggle">
+                    <span class="toggle-slider"></span>
+                    <span class="sr-only">Toggle Dark Mode</span>
+                </label>
+                <span class="dark-mode-indicator text-xs text-gray-600 hidden dark:inline-block">🌙</span>
+                <span class="light-mode-indicator text-xs text-gray-600 inline-block dark:hidden">☀️</span>
+                <button id="api-settings-btn" class="ml-2 bg-gray-200 text-gray-700 px-3 py-2 rounded-md hover:bg-gray-300 transition">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Loading Indicator -->
+        <div id="loading" class="hidden flex justify-center items-center my-16">
+            <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+            <span id="error-text">Something went wrong. Please try again.</span>
+        </div>
+
+        <!-- Main Content (Hidden until data is loaded) -->
+        <div id="main-content" class="hidden">
+            <!-- User Profile Card -->
+            <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+                <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-4">
+                    <div class="flex flex-col md:flex-row items-center">
+                        <img id="user-avatar" class="w-24 h-24 rounded-full border-4 border-white" src="assets/default-avatar.svg" alt="User Avatar">
+                        <div class="md:ml-6 text-center md:text-left mt-4 md:mt-0">
+                            <h2 id="user-handle" class="text-2xl font-bold text-white"></h2>
+                            <p id="user-rank" class="text-indigo-100"></p>
+                        </div>
+                        <div class="md:ml-auto mt-4 md:mt-0 text-center">
+                            <div class="bg-white bg-opacity-20 rounded-lg px-4 py-2">
+                                <div class="text-3xl font-bold text-white" id="user-rating"></div>
+                                <div class="text-indigo-100 text-sm">Current Rating</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-6 py-4">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="text-center">
+                            <div class="text-gray-500 text-sm">Max Rating</div>
+                            <div class="text-xl font-semibold" id="max-rating">-</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-sm">Problems Solved</div>
+                            <div class="text-xl font-semibold" id="problems-solved">-</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-sm">Contests</div>
+                            <div class="text-xl font-semibold" id="contests-count">-</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-500 text-sm">Current Streak</div>
+                            <div class="text-xl font-semibold" id="current-streak">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- Progress Chart -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">Rating Progress</h3>
+                    <canvas id="rating-chart" width="400" height="200"></canvas>
+                </div>
+
+                <!-- Activity Heatmap -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">Weekly Activity</h3>
+                    <div id="weekly-activity" class="flex items-center justify-center h-48">
+                        <div class="text-center text-gray-400">
+                            <i class="fas fa-chart-line text-4xl mb-2"></i>
+                            <p>Enter a username to view activity data</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <!-- Problem Difficulty Distribution -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">Problem Difficulty</h3>
+                    <canvas id="difficulty-chart" width="400" height="250"></canvas>
+                </div>
+
+                <!-- Problem Tags -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">Problem Tags</h3>
+                    <div id="tags-container" class="max-h-64 overflow-auto">
+                        <div class="text-center text-gray-400">
+                            <i class="fas fa-tags text-4xl mb-2"></i>
+                            <p>Enter a username to view problem tags</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Submissions -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold mb-4">Recent Submissions</h3>
+                    <div class="overflow-auto max-h-64">
+                        <table class="min-w-full">
+                            <thead>
+                                <tr>
+                                    <th class="text-left py-2 px-3 bg-indigo-50 text-indigo-800 text-sm rounded-tl-lg">Problem</th>
+                                    <th class="text-left py-2 px-3 bg-indigo-50 text-indigo-800 text-sm">When</th>
+                                    <th class="text-left py-2 px-3 bg-indigo-50 text-indigo-800 text-sm rounded-tr-lg">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="submissions-table">
+                                <!-- Will be filled with JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Achievements Section -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">Achievements</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" id="achievements-container">
+                    <!-- Will be filled with JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-gray-800 text-white py-4 mt-8">
+        <div class="container mx-auto px-4 text-center">
+            <p>CodeFit - Your Codeforces Fitness Tracker</p>
+            <p class="text-sm text-gray-400 mt-1">Created with ❤️ | Data from Codeforces API</p>
+        </div>
+    </footer>
+
+    <!-- API Settings Modal -->
+    <div id="api-settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">API Settings</h3>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">
+                You can use Codeforces API anonymously for public data. For private data, enter your API credentials below.
+                <a href="https://codeforces.com/settings/api" target="_blank" class="text-indigo-600 hover:underline">
+                    Get API key and secret from Codeforces
+                </a>
+            </p>
+            <div class="mb-4">
+                <label for="api-key" class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                <input type="text" id="api-key" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter your API key">
+            </div>
+            <div class="mb-4">
+                <label for="api-secret" class="block text-sm font-medium text-gray-700 mb-1">API Secret</label>
+                <input type="password" id="api-secret" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter your API secret">
+            </div>
+            <div class="mb-4">
+                <label for="personal-handle" class="block text-sm font-medium text-gray-700 mb-1">Personal Codeforces Handle</label>
+                <input type="text" id="personal-handle" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter your Codeforces handle">
+                <p class="text-xs text-gray-500 mt-1">This will be used for your personal dashboard</p>
+            </div>
+            <div class="mb-4">
+                <label class="flex items-center justify-between text-sm font-medium text-gray-700">
+                    <span>Dark Mode</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="dark-mode-settings">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">Enable dark mode for better visibility at night</p>
+            </div>
+            <div class="flex justify-end">
+                <button id="save-api-settings-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                    Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
