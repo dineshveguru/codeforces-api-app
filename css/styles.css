@@ -118,6 +118,101 @@
     font-size: 0.625rem;
 }
 
+/* Recommendation Styles */
+.recommendation-card {
+    border-left: 4px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.recommendation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.recommendation-card.practice {
+    border-color: #4ade80; /* Green */
+}
+
+.recommendation-card.challenge {
+    border-color: #f97316; /* Orange */
+}
+
+.recommendation-card.stretch {
+    border-color: #ef4444; /* Red */
+}
+
+.recommendation-card.weakAreas {
+    border-color: #8b5cf6; /* Purple */
+}
+
+.recommendation-category {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+}
+
+.recommendation-category.practice {
+    background-color: #4ade80;
+}
+
+.recommendation-category.challenge {
+    background-color: #f97316;
+}
+
+.recommendation-category.stretch {
+    background-color: #ef4444;
+}
+
+.recommendation-category.weakAreas {
+    background-color: #8b5cf6;
+}
+
+.difficulty-badge {
+    display: inline-block;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.difficulty-badge.newbie {
+    background-color: #cccccc;
+    color: #333333;
+}
+
+.difficulty-badge.pupil {
+    background-color: #77ff77;
+    color: #008000;
+}
+
+.difficulty-badge.specialist {
+    background-color: #77ddbb;
+    color: #03a89e;
+}
+
+.difficulty-badge.expert {
+    background-color: #aaaaff;
+    color: #0000ff;
+}
+
+.difficulty-badge.candidate-master {
+    background-color: #ff88ff;
+    color: #aa00aa;
+}
+
+.difficulty-badge.master {
+    background-color: #ffcc88;
+    color: #ff8c00;
+}
+
+.difficulty-badge.grandmaster {
+    background-color: #ffbbbb;
+    color: #ff0000;
+}
+
 /* Streak Badge */
 .streak-badge {
     background: linear-gradient(135deg, #ff9d6c 0%, #ff7e5f 100%);

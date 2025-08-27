@@ -468,6 +468,208 @@ const API = {
         ];
         
         return achievements;
+    },
+    
+    /**
+     * Fetch all problems from Codeforces
+     * @returns {Promise} - Promise with problems data
+     */
+    getAllProblems: async function() {
+        try {
+            const response = await fetch(`${this.BASE_URL}problemset.problems`);
+            const data = await response.json();
+            
+            if (data.status !== 'OK') {
+                throw new Error(data.comment || 'Failed to fetch problems data');
+            }
+            
+            return data.result;
+        } catch (error) {
+            console.error('Error fetching problems:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Generate personalized problem recommendations
+     * @param {Object} userData - User data including submissions
+     * @param {Object} problemsData - Problems data from API
+     * @param {Boolean} useML - Whether to use ML recommendations (default: true)
+     * @returns {Object} - Recommendations object with different categories
+     */
+    generateRecommendations: async function(userData, problemsData, useML = true) {
+        if (!userData || !problemsData || !problemsData.problems || !userData.submissions) {
+            return null;
+        }
+        
+        // Get solved problems
+        const solvedProblems = new Set();
+        userData.submissions
+            .filter(sub => sub.verdict === 'OK')
+            .forEach(sub => {
+                const problemId = `${sub.problem.contestId}${sub.problem.index}`;
+                solvedProblems.add(problemId);
+            });
+        
+        // Extract user's skill level
+        const userRating = userData.userInfo.rating || 800;
+        
+        // Extract solved problem tags
+        const solvedTags = new Map();
+        const attemptedProblems = new Set();
+        
+        userData.submissions.forEach(sub => {
+            const problemId = `${sub.problem.contestId}${sub.problem.index}`;
+            attemptedProblems.add(problemId);
+            
+            if (sub.verdict === 'OK' && sub.problem.tags) {
+                sub.problem.tags.forEach(tag => {
+                    solvedTags.set(tag, (solvedTags.get(tag) || 0) + 1);
+                });
+            }
+        });
+        
+        // Find weak areas (tags with fewer solves)
+        const tagEntries = Array.from(solvedTags.entries());
+        const weakTags = tagEntries.length > 0
+            ? tagEntries.sort((a, b) => a[1] - b[1]).slice(0, 3).map(entry => entry[0])
+            : ['implementation', 'math', 'greedy']; // Default tags for beginners
+        
+        // Calculate appropriate difficulty range
+        const minDifficulty = Math.max(800, userRating - 300);
+        const maxDifficulty = userRating + 300;
+        
+        // Get available problems
+        const availableProblems = problemsData.problems.filter(problem => {
+            const problemId = `${problem.contestId}${problem.index}`;
+            return !attemptedProblems.has(problemId) && problem.rating;
+        });
+        
+        // Get recommendations
+        const recommendations = {
+            practice: [], // Problems slightly below user level for practice
+            challenge: [], // Problems at user level for challenge
+            stretch: [],  // Problems slightly above user level to stretch skills
+            weakAreas: [] // Problems focusing on weak areas
+        };
+        
+        // Practice problems (below current level)
+        recommendations.practice = availableProblems
+            .filter(problem => problem.rating >= minDifficulty && problem.rating < userRating)
+            .sort((a, b) => b.rating - a.rating) // Hardest first
+            .slice(0, 5);
+        
+        // Challenge problems (at current level)
+        recommendations.challenge = availableProblems
+            .filter(problem => problem.rating >= userRating && problem.rating <= userRating + 100)
+            .sort((a, b) => Math.random() - 0.5) // Random order
+            .slice(0, 5);
+        
+        // Stretch problems (above current level)
+        recommendations.stretch = availableProblems
+            .filter(problem => problem.rating > userRating + 100 && problem.rating <= maxDifficulty)
+            .sort((a, b) => a.rating - b.rating) // Easiest first
+            .slice(0, 3);
+        
+        // Weak areas problems
+        recommendations.weakAreas = availableProblems
+            .filter(problem => 
+                problem.tags && 
+                problem.tags.some(tag => weakTags.includes(tag)) &&
+                problem.rating >= minDifficulty && 
+                problem.rating <= maxDifficulty
+            )
+            .sort((a, b) => Math.abs(a.rating - userRating) - Math.abs(b.rating - userRating)) // Closest to user level
+            .slice(0, 5);
+        
+        // Ensure we don't have duplicate problems
+        const dedupeRecommendations = () => {
+            const seen = new Set();
+            
+            Object.keys(recommendations).forEach(category => {
+                recommendations[category] = recommendations[category].filter(problem => {
+                    const id = `${problem.contestId}${problem.index}`;
+                    if (seen.has(id)) return false;
+                    seen.add(id);
+                    return true;
+                });
+            });
+        };
+        
+        dedupeRecommendations();
+        
+        // Ensure each category has at least a few problems
+        // If we're short on any category, pull from others or find more
+        const ensureMinimumRecommendations = () => {
+            const minPerCategory = 3;
+            const allProblems = [];
+            
+            // Collect all problems we've already recommended
+            Object.values(recommendations).forEach(problems => {
+                allProblems.push(...problems);
+            });
+            
+            const seenIds = new Set(allProblems.map(p => `${p.contestId}${p.index}`));
+            
+            // For each category that needs more problems
+            Object.keys(recommendations).forEach(category => {
+                if (recommendations[category].length < minPerCategory) {
+                    // How many more do we need?
+                    const needed = minPerCategory - recommendations[category].length;
+                    
+                    // Get more problems that fit this category criteria
+                    const moreProblems = availableProblems
+                        .filter(problem => {
+                            const id = `${problem.contestId}${problem.index}`;
+                            return !seenIds.has(id);
+                        })
+                        .sort((a, b) => Math.abs(a.rating - userRating) - Math.abs(b.rating - userRating))
+                        .slice(0, needed);
+                    
+                    // Add to the category and mark as seen
+                    recommendations[category].push(...moreProblems);
+                    moreProblems.forEach(p => seenIds.add(`${p.contestId}${p.index}`));
+                }
+            });
+        };
+        
+        ensureMinimumRecommendations();
+        
+        // If ML is enabled, try to enhance recommendations with ML
+        if (useML && userData.userInfo && userData.userInfo.handle) {
+            try {
+                // Get ML recommendations
+                const handle = userData.userInfo.handle;
+                
+                // Add a special ML category for smart recommendations
+                const mlRecommendation = await Recommendations.getPersonalizedMLRecommendation(
+                    handle, 
+                    userData, 
+                    problemsData
+                );
+                
+                if (mlRecommendation) {
+                    recommendations.ml = [mlRecommendation.problem];
+                }
+                
+                // Enhance learning path with ML recommendations
+                const mlPath = await Recommendations.getMLLearningPath(
+                    handle,
+                    userData,
+                    problemsData
+                );
+                
+                if (mlPath && mlPath.ml_enhanced) {
+                    recommendations.mlPath = mlPath;
+                }
+                
+                console.log("ML recommendations successfully integrated");
+            } catch (error) {
+                console.error("Error integrating ML recommendations:", error);
+            }
+        }
+        
+        return recommendations;
     }
 };
 

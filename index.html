@@ -158,6 +158,22 @@
                     <!-- Will be filled with JS -->
                 </div>
             </div>
+            
+            <!-- Recommendations Section -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">Personalized Recommendations</h3>
+                    <button id="refresh-recommendations-btn" class="text-indigo-600 hover:text-indigo-800 flex items-center text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+                <div id="recommendations-container">
+                    <div class="text-center py-12 text-gray-500">
+                        <i class="fas fa-book-reader text-5xl mb-3 opacity-30"></i>
+                        <p class="text-lg">Enter a Codeforces handle to get personalized recommendations</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -206,6 +222,16 @@
                 </label>
                 <p class="text-xs text-gray-500 mt-1">Enable dark mode for better visibility at night</p>
             </div>
+            <div class="mb-4">
+                <label class="flex items-center justify-between text-sm font-medium text-gray-700">
+                    <span>Use ML Recommendations</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="ml-recommendations-toggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">Enable machine learning based recommendations (requires local server)</p>
+            </div>
             <div class="flex justify-end">
                 <button id="save-api-settings-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
                     Save Settings
@@ -216,6 +242,7 @@
 
     <script src="js/api.js"></script>
     <script src="js/charts.js"></script>
+    <script src="js/recommendations.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

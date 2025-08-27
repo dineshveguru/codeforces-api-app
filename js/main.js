@@ -13,6 +13,12 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.classList.add('dark-mode');
     }
     
+    // Initialize ML settings
+    const mlEnabled = localStorage.getItem('codefit_ml_enabled');
+    if (mlEnabled !== null) {
+        Recommendations.ML_CONFIG.enabled = mlEnabled === 'true';
+    }
+    
     // DOM Elements
     const usernameInput = document.getElementById('username-input');
     const searchBtn = document.getElementById('search-btn');
@@ -22,6 +28,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const mainContent = document.getElementById('main-content');
     const personalDashboardBtn = document.getElementById('personal-dashboard-btn');
     const darkModeToggle = document.getElementById('dark-mode-toggle');
+    const refreshRecommendationsBtn = document.getElementById('refresh-recommendations-btn');
+    
+    // Global variables for recommendations
+    let problemsData = null;
+    let currentUserData = null;
     
     // API Settings Elements
     const apiSettingsBtn = document.getElementById('api-settings-btn');
@@ -41,6 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     personalDashboardBtn.addEventListener('click', loadPersonalDashboard);
+    refreshRecommendationsBtn.addEventListener('click', refreshRecommendations);
     
     // API Settings Modal event listeners
     apiSettingsBtn.addEventListener('click', openApiSettingsModal);
@@ -81,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
         apiSecretInput.value = API.API_SECRET || '';
         personalHandleInput.value = API.PERSONAL_HANDLE || '';
         darkModeSettings.checked = API.DARK_MODE;
+        document.getElementById('ml-recommendations-toggle').checked = Recommendations.ML_CONFIG.enabled;
         
         apiSettingsModal.classList.remove('hidden');
     }
@@ -100,6 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const secret = apiSecretInput.value.trim();
         const handle = personalHandleInput.value.trim();
         const isDarkMode = darkModeSettings.checked;
+        const useML = document.getElementById('ml-recommendations-toggle').checked;
         
         API.setCredentials(key, secret);
         API.setPersonalHandle(handle);
@@ -109,6 +123,10 @@ document.addEventListener('DOMContentLoaded', function() {
             API.setDarkMode(isDarkMode);
             toggleDarkMode();
         }
+        
+        // Update ML settings
+        Recommendations.ML_CONFIG.enabled = useML;
+        localStorage.setItem('codefit_ml_enabled', useML.toString());
         
         // Show or hide personal dashboard button
         if (handle) {
@@ -157,14 +175,39 @@ document.addEventListener('DOMContentLoaded', function() {
             // Save username to localStorage
             localStorage.setItem('codefit_username', username);
             
-            // Fetch data from API
-            const userData = await API.getAllUserData(username);
+            // Fetch user data and problem data in parallel
+            const fetchPromises = [API.getAllUserData(username)];
+            
+            // Only fetch problems data if we don't already have it
+            if (!problemsData) {
+                fetchPromises.push(API.getAllProblems());
+            }
+            
+            const results = await Promise.all(fetchPromises);
+            
+            // Get user data
+            currentUserData = results[0];
+            
+            // If we fetched problems data, save it
+            if (results.length > 1) {
+                problemsData = results[1];
+            }
             
             // Calculate statistics
-            const stats = API.calculateStats(userData);
+            const stats = API.calculateStats(currentUserData);
             
             // Update UI with user data
-            updateUI(userData, stats);
+            updateUI(currentUserData, stats);
+            
+            // Generate and display recommendations
+            if (problemsData) {
+                try {
+                    const recommendations = await API.generateRecommendations(currentUserData, problemsData);
+                    displayRecommendations(recommendations);
+                } catch (error) {
+                    console.error('Error generating recommendations:', error);
+                }
+            }
             
             // Hide loading indicator and show content
             loadingIndicator.classList.add('hidden');
@@ -432,5 +475,126 @@ document.addEventListener('DOMContentLoaded', function() {
         if (Charts.difficultyChart) {
             Charts.difficultyChart.update();
         }
+    }
+    
+    /**
+     * Refresh problem recommendations
+     */
+    async function refreshRecommendations() {
+        if (!currentUserData) {
+            showError('Please search for a user first');
+            return;
+        }
+        
+        try {
+            // If we don't have problems data yet, fetch it
+            if (!problemsData) {
+                problemsData = await API.getAllProblems();
+            }
+            
+            // Generate fresh recommendations
+            const recommendations = await API.generateRecommendations(currentUserData, problemsData);
+            
+            // Display recommendations
+            displayRecommendations(recommendations);
+        } catch (error) {
+            console.error('Error refreshing recommendations:', error);
+            showError('Failed to refresh recommendations. Please try again.');
+        }
+    }
+    
+    /**
+     * Display problem recommendations
+     * @param {Object} recommendations - Recommendations object with categories
+     */
+    function displayRecommendations(recommendations) {
+        if (!recommendations) {
+            return;
+        }
+        
+        const container = document.getElementById('recommendations-container');
+        container.innerHTML = '';
+        
+        // Create categories map with friendly names and icons
+        const categories = {
+            ml: { name: 'ML Recommendation', icon: 'fas fa-robot', description: 'Smart recommendation by our ML algorithm' },
+            practice: { name: 'Practice', icon: 'fas fa-dumbbell', description: 'Strengthen your skills with these problems' },
+            challenge: { name: 'Challenge', icon: 'fas fa-bolt', description: 'These match your current level' },
+            stretch: { name: 'Stretch', icon: 'fas fa-arrow-up', description: 'Push your limits with these harder problems' },
+            weakAreas: { name: 'Weak Areas', icon: 'fas fa-wrench', description: 'Focus on improving these topics' }
+        };
+        
+        // Function to get difficulty class
+        const getDifficultyClass = rating => {
+            if (rating < 1200) return 'newbie';
+            if (rating < 1400) return 'pupil';
+            if (rating < 1600) return 'specialist';
+            if (rating < 1900) return 'expert';
+            if (rating < 2100) return 'candidate-master';
+            if (rating < 2400) return 'master';
+            return 'grandmaster';
+        };
+        
+        // Create a section for each category
+        Object.entries(categories).forEach(([categoryKey, categoryInfo]) => {
+            const problems = recommendations[categoryKey];
+            
+            if (!problems || problems.length === 0) {
+                return;
+            }
+            
+            // Create category header
+            const categorySection = document.createElement('div');
+            categorySection.className = 'mb-6';
+            categorySection.innerHTML = `
+                <div class="flex items-center mb-2">
+                    <span class="recommendation-category ${categoryKey} mr-2">${categoryInfo.name}</span>
+                    <i class="${categoryInfo.icon} mr-2"></i>
+                    <span class="text-sm text-gray-600">${categoryInfo.description}</span>
+                </div>
+            `;
+            
+            // Create problems grid
+            const problemsGrid = document.createElement('div');
+            problemsGrid.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3';
+            
+            // Add each problem
+            problems.forEach(problem => {
+                const problemCard = document.createElement('div');
+                problemCard.className = `recommendation-card ${categoryKey} bg-gray-50 rounded-md shadow-sm p-3 hover:shadow-md transition-all`;
+                
+                // Format tags
+                const tags = problem.tags 
+                    ? problem.tags.map(tag => `<span class="inline-block bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded mr-1 mb-1">${tag}</span>`).join('')
+                    : '';
+                
+                // Create problem link
+                const problemLink = `https://codeforces.com/contest/${problem.contestId}/problem/${problem.index}`;
+                
+                problemCard.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <a href="${problemLink}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-medium">
+                            ${problem.contestId}${problem.index}. ${problem.name}
+                        </a>
+                        <span class="difficulty-badge ${getDifficultyClass(problem.rating)}">${problem.rating}</span>
+                    </div>
+                    <div class="text-xs flex flex-wrap mt-2">${tags}</div>
+                `;
+                
+                problemsGrid.appendChild(problemCard);
+            });
+            
+            categorySection.appendChild(problemsGrid);
+            container.appendChild(categorySection);
+        });
+        
+        // Add instructions for using recommendations
+        const instructions = document.createElement('div');
+        instructions.className = 'mt-6 p-3 bg-indigo-50 text-indigo-700 rounded-md text-sm';
+        instructions.innerHTML = `
+            <p><i class="fas fa-lightbulb mr-1"></i> <strong>Pro Tip:</strong> After solving a problem, refresh the recommendations to get new suggestions based on your progress.</p>
+        `;
+        
+        container.appendChild(instructions);
     }
 });
